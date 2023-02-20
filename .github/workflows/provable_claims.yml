@@ -1,0 +1,39 @@
+name: provable_claims
+run-name: ${{ github.actor }} is running provable_claims
+
+on: [push, pull_request]
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                python-version: ["3.9"]
+
+        steps:
+            - run: echo "Job triggered by a ${{ github.event_name }} event @ ${{ github.repository }}/${{ github.ref }}"
+            - name: Clone ProvableClaims
+              uses: actions/checkout@v3
+              with:
+                  name: CapyRobot/ProvableClaims
+                  path: 'ProvableClaims'
+            - name: Clone project
+              uses: actions/checkout@v3
+              with:
+                  path: 'project'
+            - name: Set up Python ${{ matrix.python-version }}
+              uses: actions/setup-python@v4
+              with:
+                  python-version: ${{ matrix.python-version }}
+            - name: Install dependencies
+              run: |
+                  ls
+                  pwd
+                  python -m pip install --upgrade pip
+                  pip install flake8
+                  if [ -f requirements.txt ]; then pip install -r ProvableClaims/requirements.txt; fi
+            - name: Run ProvableClaims
+              run: |
+                  ls
+                  pwd
+                  python -m ProvableClaims/provable_claims/provable_claims.py --config_path ./project/.provable_claims --directory ./project/
