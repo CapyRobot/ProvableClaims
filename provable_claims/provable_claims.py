@@ -28,99 +28,118 @@ import json
 import argparse
 
 
-CONFIG_PARAMETERS = [
-    {
-        "name": "config_path",
-        "default": ".provable_claims",
-        "type": str,
-        "description": "Config file path; default='.provable_claims'",
-    },
-    {
-        "name": "directory",
-        "default": "./",
-        "type": str,
-        "description": "Only files within this directory are searched; default='./'",
-    },
-    {
-        "name": "output_report",
-        "default": None,
-        "type": str,
-        "description": "Path for generated output report; default=None",
-    },
-    {
-        "name": "include_pattern",
-        "default": ["*"],
-        "type": list,
-        "subtype": str,
-        "description": "List of patterns for including files; Unix shell-style wildcards; default=['*']",
-    },
-    {
-        "name": "exclude_pattern",
-        "default": [],
-        "type": list,
-        "subtype": str,
-        "description": "List of patterns to exclude files; Unix shell-style wildcards; default=[]",
-    },
-]
-
-DEFAULT_CONFIG = {}
-for parameter in CONFIG_PARAMETERS:
-    DEFAULT_CONFIG[parameter["name"]] = parameter["default"]
-
-
-def is_iterable(obj):
-    try:
-        _ = iter(obj)
-        return True
-    except TypeError:
-        return False
-
-
-def load_cli_args():
+class Config:
     """
+    This module initializes the script configuration.
+    1. config = default values
+    2. override values with configuration file
+    3. override values with cli args
     """
-    parser = argparse.ArgumentParser(
-        description='ProvableClaims; a CLI tool for matching proofs and claims.')
-    for parameter in CONFIG_PARAMETERS:
-        if is_iterable(parameter["type"]()) and "subtype" in parameter.keys():
-            parser.add_argument(
-                "--" + parameter["name"], nargs='+', type=parameter["subtype"], help=parameter["description"])
-        else:
-            parser.add_argument(
-                "--" + parameter["name"], type=parameter["type"], help=parameter["description"])
-    return parser.parse_args()
 
+    def __init__(self):
+        """
+        """
+        self._config = Config.__default()
+        config_path = self._config["config_path"]
 
-def load_config():
-    """
-    """
-    config = DEFAULT_CONFIG
-    config_path = config["config_path"]
+        cli_args = Config.__read_cli_args()
+        if cli_args.config_path:
+            config_path = cli_args.config_path
 
-    cli_args = load_cli_args()
-    if cli_args.config_path:
-        config_path = cli_args.config_path
+        # try to read config file if any
+        # override default values with config file values
+        self.__read_file(config_path)
 
-    try:
-        with open(config_path, "r") as f:
-            file_config = json.load(f)
-            for key in file_config.keys():
-                if key not in config:
-                    print(
-                        f"WARN: key \"{key}\" from config file is not an input parameter. Ignoring it.")
-            config.update(file_config)
-    except FileNotFoundError:
-        print(
-            f"WARN: config file @ \"{config_path}\" does not exist. Using default config + CLI args.")
-    except:
-        print(f"ERROR: failure to parse config file @ \"{config_path}\".\n")
-        raise
+        # override current values with CLI values
+        for arg in cli_args.__dict__:
+            if getattr(cli_args, arg):
+                self._config[arg] = getattr(cli_args, arg)
 
-    for arg in cli_args.__dict__:
-        if getattr(cli_args, arg):
-            config[arg] = getattr(cli_args, arg)
+    def __read_cli_args():
+        """
+        """
+        def is_iterable(obj):
+            try:
+                _ = iter(obj)
+                return True
+            except TypeError:
+                return False
 
-    return config
+        parser = argparse.ArgumentParser(
+            description='ProvableClaims; a CLI tool for matching proofs and claims.')
+        for parameter in Config.__parameters():
+            if is_iterable(parameter["type"]()) and "subtype" in parameter.keys():
+                parser.add_argument(
+                    "--" + parameter["name"], nargs='+', type=parameter["subtype"], help=parameter["description"])
+            else:
+                parser.add_argument(
+                    "--" + parameter["name"], type=parameter["type"], help=parameter["description"])
+        return parser.parse_args()
+
+    def __read_file(self, config_path):
+        try:
+            with open(config_path, "r") as f:
+                file_config = json.load(f)
+                for key in file_config.keys():
+                    if key not in self._config:
+                        print(
+                            f"WARN: key \"{key}\" from config file is not an input parameter. Ignoring it.")
+                self._config.update(file_config)
+        except FileNotFoundError:
+            print(
+                f"WARN: config file @ \"{config_path}\" does not exist. Using default config + CLI args.")
+        except:
+            print(
+                f"ERROR: failure to parse config file @ \"{config_path}\".\n")
+            raise
+
+    def __parameters():
+        return [
+            {
+                "name": "config_path",
+                "default": "./.provable_claims",
+                "type": str,
+                "description": "Config file path; default='./.provable_claims'",
+            },
+            {
+                "name": "directory",
+                "default": "./",
+                "type": str,
+                "description": "Only files within this directory are searched; default='./'",
+            },
+            {
+                "name": "output_report",
+                "default": None,
+                "type": str,
+                "description": "Path for generated output report; default=None",
+            },
+            {
+                "name": "include_pattern",
+                "default": ["*"],
+                "type": list,
+                "subtype": str,
+                "description": "List of patterns for including files; Unix shell-style wildcards; default=['*']",
+            },
+            {
+                "name": "exclude_pattern",
+                "default": [],
+                "type": list,
+                "subtype": str,
+                "description": "List of patterns to exclude files; Unix shell-style wildcards; default=[]",
+            },
+        ]
+
+    def __default():
+        default_config = {}
+        for parameter in Config.__parameters():
+            default_config[parameter["name"]] = parameter["default"]
+        return default_config
+
+    def at(self, key):
+        return self._config[key]
+
+    def print(self):
+        print(json.dumps(self._config, sort_keys=True, indent=4))
 
 
 def get_all_files_in_directory(root_dir):
@@ -154,9 +173,16 @@ class Occurrence:
         self.position = position
 
 
+def empty_file(filepath):
+    return os.path.getsize(filepath) == 0
+
+
 def find_occurrences_in_file(pattern: re.Pattern, filepath: str) -> list[Occurrence]:
     """
     """
+
+    if empty_file(filepath):
+        return []
 
     with open(filepath, 'r') as f:
         mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
@@ -253,14 +279,16 @@ def log_results(results_map: dict):
             print(occurrences_log)
 
 
-if __name__ == "__main__":
+def run():
 
-    config = load_config()
-    print(config)
+    config = Config()
+    print("\n== Config:")
+    config.print()
+    print()
 
-    file_list = get_all_files_in_directory(config["directory"])
+    file_list = get_all_files_in_directory(config.at("directory"))
     file_list = filter_files_of_interest(
-        file_list, config["include_pattern"], config["exclude_pattern"])
+        file_list, config.at("include_pattern"), config.at("exclude_pattern"))
 
     print(file_list)
 
@@ -283,3 +311,7 @@ if __name__ == "__main__":
 
     print(f"== {len(file_list)} files scanned, {len(results_map)} tag ids found.")
     print("== \033[32m" + "Looks Good To Me :)" + "\033[0m")
+
+
+if __name__ == "__main__":
+    run()
