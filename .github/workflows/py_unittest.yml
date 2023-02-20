@@ -4,13 +4,12 @@ run-name: ${{ github.actor }} is running ci-python-unittest
 on: [push, pull_request]
 
 jobs:
-    build:
+    test:
         runs-on: ubuntu-latest
         strategy:
             matrix:
                 python-version: ["3.7", "3.8", "3.9", "3.10"]
-    Test:
-        runs-on: ubuntu-latest
+
         steps:
             - run: echo "Job triggered by a ${{ github.event_name }} event @ ${{ github.repository }}/${{ github.ref }}"
             - uses: actions/checkout@v3
