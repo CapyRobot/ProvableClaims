@@ -1,3 +1,3 @@
-from .provable_claims import Config
+from .provable_claims import Config, run
 
-__all__ = ["Config"]
+__all__ = ["Config", "run"]

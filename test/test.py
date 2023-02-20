@@ -16,8 +16,7 @@ class TestConfig(unittest.TestCase):
     def test_args_from_file(self):
         config = init_config(
             ["provable_claims.py", "--config_path", TEST_DIR+".config"])
-        self.assertEqual(len(config.at("exclude_pattern")), 1)
-        self.assertEqual(config.at("exclude_pattern")[0], "excluded.md")
+        self.assertEqual(config.at("exclude_pattern")[0], "**/excluded.md")
 
     def test_args_from_cli(self):
         config = init_config(
@@ -25,6 +24,18 @@ class TestConfig(unittest.TestCase):
              "--exclude_pattern", "<none>"])
         self.assertEqual(len(config.at("exclude_pattern")), 1)
         self.assertEqual(config.at("exclude_pattern")[0], "<none>")
+
+
+class TestScript(unittest.TestCase):
+    def test_all_match(self):
+        config = init_config(
+            ["provable_claims.py", "--config_path", TEST_DIR+".config"])
+        self.assertEqual(provable_claims.run(), 0)
+
+    def test_not_all_match(self):
+        config = init_config(
+            ["provable_claims.py", "--config_path", TEST_DIR+".config_error"])
+        self.assertEqual(provable_claims.run(), 1)
 
 
 if __name__ == '__main__':

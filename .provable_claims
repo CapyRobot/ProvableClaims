@@ -1,4 +1,5 @@
 {
+    "output_report": "out/pc_report.json",
     "include_pattern": ["*"],
     "exclude_pattern": [
         "./test/**",

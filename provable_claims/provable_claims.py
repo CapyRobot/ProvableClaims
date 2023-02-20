@@ -166,57 +166,6 @@ def filter_files_of_interest(file_list, include_patterns, exclude_patterns):
     return filtered_files
 
 
-class Occurrence:
-    def __init__(self, id: str, file: str, position: str):
-        self.id = id
-        self.file = file
-        self.position = position
-
-
-def empty_file(filepath):
-    return os.path.getsize(filepath) == 0
-
-
-def find_occurrences_in_file(pattern: re.Pattern, filepath: str) -> list[Occurrence]:
-    """
-    """
-
-    if empty_file(filepath):
-        return []
-
-    with open(filepath, 'r') as f:
-        mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
-
-    matches = list(pattern.finditer(mm))
-    if not matches:
-        return []
-
-    last_match = matches[-1].start()
-    newline_map = {-1: 1}  # -1 so a failed 'rfind' maps to the first line.
-    newline_re = re.compile(b'\n')
-    for line_number, newline_match in enumerate(newline_re.finditer(mm), 2):
-        offset = newline_match.start()
-        if offset > last_match:  # stop at last match
-            break
-        newline_map[offset] = line_number
-
-    for m in matches:
-        # failure -> -1 maps to line 1.
-        newline_offset = mm.rfind(b'\n', 0, m.start())
-        line_number = newline_map[newline_offset]
-        column = m.start() - max(0, newline_offset)
-        yield Occurrence(m.group(1).decode(), filepath, f"{line_number}:{column}")
-
-
-def find_all_occurrences(file_list, pattern) -> list[Occurrence]:
-    """
-    """
-    occurrences = []
-    for filepath in file_list:
-        occurrences += find_occurrences_in_file(pattern, filepath)
-    return occurrences
-
-
 class TagResults:
     def __init__(self, id: str):
         self.id = id
@@ -255,19 +204,77 @@ class TagResults:
         return False
 
 
-def create_results_map(claim_matches, proof_matches):
-    results_map = {}
-    for match in claim_matches:
-        id = match.id
-        if id not in results_map.keys():
-            results_map[id] = TagResults(id)
-        results_map[id].claims.append(f"{match.file}:{match.position}")
-    for match in proof_matches:
-        id = match.id
-        if id not in results_map.keys():
-            results_map[id] = TagResults(id)
-        results_map[id].proofs.append(f"{match.file}:{match.position}")
-    return results_map
+class Occurrence:
+    def __init__(self, id: str, file: str, position: str):
+        self.id = id
+        self.file = file
+        self.position = position
+
+
+class REMatcher:
+
+    def __init__(self):
+        self.claim_pattern = re.compile(r'@claim{([^}]*)}'.encode())
+        self.proof_pattern = re.compile(r'@proof{([^}]*)}'.encode())
+
+    def match(self, file_list):
+        claim_matches = self.__find_all_occurrences(
+            file_list, self.claim_pattern)
+        proof_matches = self.__find_all_occurrences(
+            file_list, self.proof_pattern)
+        return self.__create_results_map(claim_matches, proof_matches)
+
+    def __find_occurrences_in_file(self, pattern: re.Pattern, filepath: str) -> list[Occurrence]:
+        """
+        """
+
+        if os.path.getsize(filepath) == 0:  # empty file
+            return []
+
+        with open(filepath, 'r') as f:
+            mm = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+
+        matches = list(pattern.finditer(mm))
+        if not matches:
+            return []
+
+        last_match = matches[-1].start()
+        newline_map = {-1: 1}  # -1 so a failed 'rfind' maps to the first line.
+        newline_re = re.compile(b'\n')
+        for line_number, newline_match in enumerate(newline_re.finditer(mm), 2):
+            offset = newline_match.start()
+            if offset > last_match:  # stop at last match
+                break
+            newline_map[offset] = line_number
+
+        for m in matches:
+            # failure -> -1 maps to line 1.
+            newline_offset = mm.rfind(b'\n', 0, m.start())
+            line_number = newline_map[newline_offset]
+            column = m.start() - max(0, newline_offset)
+            yield Occurrence(m.group(1).decode(), filepath, f"{line_number}:{column}")
+
+    def __find_all_occurrences(self, file_list, pattern) -> list[Occurrence]:
+        """
+        """
+        occurrences = []
+        for filepath in file_list:
+            occurrences += self.__find_occurrences_in_file(pattern, filepath)
+        return occurrences
+
+    def __create_results_map(self, claim_matches, proof_matches):
+        results_map = {}
+        for match in claim_matches:
+            id = match.id
+            if id not in results_map.keys():
+                results_map[id] = TagResults(id)
+            results_map[id].claims.append(f"{match.file}:{match.position}")
+        for match in proof_matches:
+            id = match.id
+            if id not in results_map.keys():
+                results_map[id] = TagResults(id)
+            results_map[id].proofs.append(f"{match.file}:{match.position}")
+        return results_map
 
 
 def log_results(results_map: dict):
@@ -281,7 +288,8 @@ def log_results(results_map: dict):
 
 def create_report(results_map: dict, filepath: str):
     if filepath:
-        out = {"number_tags": len(results_map), "errors": [], "warns": []}
+        out = {"number_tags": len(results_map),
+               "error_tags": [], "warn_tags": []}
         for id, tag_results in results_map.items():
             error, warn, _ = tag_results.create_error_logs()
             out[id] = {
@@ -289,10 +297,12 @@ def create_report(results_map: dict, filepath: str):
                 "proofs": tag_results.proofs,
             }
             if error != "":
-                out["errors"].append(error)
-                out["warns"].append(warn)
+                out["error_tags"].append(id)
+            if warn != "":
+                out["warn_tags"].append(warn)
 
         print(f"== Writing output report @ {filepath}")
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         with open(filepath, 'w') as f:
             json.dump(out, f)
 
@@ -300,6 +310,7 @@ def create_report(results_map: dict, filepath: str):
 def run():
 
     config = Config()
+    # TODO: print on debug mode only
     print("\n== Config:")
     config.print()
     print()
@@ -308,29 +319,21 @@ def run():
     file_list = filter_files_of_interest(
         file_list, config.at("include_pattern"), config.at("exclude_pattern"))
 
-    print(file_list)
+    # TODO: on debug mode, print(file_list)
 
-    claim_pattern = re.compile(r'@claim{([^}]*)}'.encode())
-    proof_pattern = re.compile(r'@proof{([^}]*)}'.encode())
-    claim_matches = find_all_occurrences(file_list, claim_pattern)
-    proof_matches = find_all_occurrences(file_list, proof_pattern)
+    matcher = REMatcher()
+    results_map = matcher.match(file_list)
 
-    print(claim_matches)
-    print(proof_matches)
-
-    results_map = create_results_map(claim_matches, proof_matches)
-
-    print(results_map)
     log_results(results_map)
     create_report(results_map, config.at("output_report"))
 
+    print(f"== {len(file_list)} files scanned, {len(results_map)} tag ids found.")
     for res in results_map.values():
         if res.is_incomplete():
-            exit(1)
-
-    print(f"== {len(file_list)} files scanned, {len(results_map)} tag ids found.")
+            return 1
     print("== \033[32m" + "Looks Good To Me :)" + "\033[0m")
+    return 0
 
 
 if __name__ == "__main__":
-    run()
+    exit(run())
