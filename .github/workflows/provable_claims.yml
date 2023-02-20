@@ -36,4 +36,4 @@ jobs:
               run: |
                   ls
                   pwd
-                  python -m ProvableClaims/provable_claims/provable_claims.py --config_path ./project/.provable_claims --directory ./project/
+                  python ProvableClaims/provable_claims/provable_claims.py --config_path ./project/.provable_claims --directory ./project/
