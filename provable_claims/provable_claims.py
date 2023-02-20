@@ -279,6 +279,24 @@ def log_results(results_map: dict):
             print(occurrences_log)
 
 
+def create_report(results_map: dict, filepath: str):
+    if filepath:
+        out = {"number_tags": len(results_map), "errors": [], "warns": []}
+        for id, tag_results in results_map.items():
+            error, warn, _ = tag_results.create_error_logs()
+            out[id] = {
+                "claims": tag_results.claims,
+                "proofs": tag_results.proofs,
+            }
+            if error != "":
+                out["errors"].append(error)
+                out["warns"].append(warn)
+
+        print(f"== Writing output report @ {filepath}")
+        with open(filepath, 'w') as f:
+            json.dump(out, f)
+
+
 def run():
 
     config = Config()
@@ -304,6 +322,7 @@ def run():
 
     print(results_map)
     log_results(results_map)
+    create_report(results_map, config.at("output_report"))
 
     for res in results_map.values():
         if res.is_incomplete():

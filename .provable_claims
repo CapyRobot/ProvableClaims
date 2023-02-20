@@ -1,5 +1,4 @@
 {
-    "output_report": "claim_surveyor_out.json",
     "include_pattern": ["*"],
     "exclude_pattern": [
         "./test/**",
