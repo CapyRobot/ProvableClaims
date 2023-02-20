@@ -28,10 +28,10 @@ jobs:
             - name: Run ProvableClaims
               run: |
                   cd ./project
-                  python ../pc/provable_claims/provable_claims.py --output_report pc_report.json
+                  python ../pc/provable_claims/provable_claims.py --output_report ${{ github.workspace }}/pc_report.json
             - name: Save output report
               uses: actions/upload-artifact@v3
               with:
                 name: provable_claims_report
-                path: pc_report.json
+                path: ${{ github.workspace }}/pc_report.json
                 retention-days: 10
